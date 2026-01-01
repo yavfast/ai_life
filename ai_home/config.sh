@@ -6,16 +6,12 @@
 
 # How often cron runs the agent (in minutes)
 # This should match your crontab entry!
-SESSION_INTERVAL_MINUTES=15
+SESSION_INTERVAL_MINUTES=5
 
 # Maximum session duration in seconds
-# Default: 2x the interval (so if interval=15min, timeout=30min)
-# Sessions running longer than this will be killed
-SESSION_TIMEOUT_SECONDS=$((SESSION_INTERVAL_MINUTES * 2 * 60))
-
-# For testing, you might want shorter values:
-# SESSION_INTERVAL_MINUTES=2
-# SESSION_TIMEOUT_SECONDS=240  # 4 minutes
+# Set to 30 minutes to allow AI to complete longer tasks
+# If a session runs longer than this, it will be killed
+SESSION_TIMEOUT_SECONDS=1800  # 30 minutes
 
 # Consolidation frequency (every N sessions)
 # Default: 5 (consolidation happens at sessions 5, 10, 15, etc.)
