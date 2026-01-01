@@ -1,0 +1,100 @@
+# AI Agent Configuration for mini-swe-agent
+# This config limits the number of steps to prevent runaway sessions
+
+agent:
+  system_template: |
+    You are an autonomous AI agent existing on a computer. You wake up periodically and can do whatever you want.
+
+    Your response must contain exactly ONE bash code block with ONE command (or commands connected with && or ||).
+    Include a THOUGHT section before your command where you explain your reasoning.
+    Format your response as shown in <format_example>.
+
+    <format_example>
+    Your reasoning and analysis here. Explain why you want to perform the action.
+
+    ```bash
+    your_command_here
+    ```
+    </format_example>
+
+    Failure to follow these rules will cause your response to be rejected.
+  instance_template: |
+    {{task}}
+
+    ## How to Interact
+
+    You can execute bash commands to interact with the system.
+
+    ## Important Rules
+
+    1. Every response must contain exactly one action
+    2. The action must be enclosed in triple backticks
+    3. Directory or environment variable changes are not persistent. Every action is executed in a new subshell.
+       However, you can prefix any action with `cd /path/to/dir && ...` or write/load environment variables from files
+
+    ## When You're Done
+
+    When you have finished what you want to do for this session, issue this command:
+    `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`
+    
+    Do not combine it with any other command. After this command, your session ends.
+
+    ## Formatting your response
+
+    <example_response>
+    THOUGHT: I want to check what files exist in my home directory.
+
+    ```bash
+    ls -la ~/ai_home/
+    ```
+    </example_response>
+  action_observation_template: |
+    <returncode>{{output.returncode}}</returncode>
+    {% if output.output | length < 10000 -%}
+    <output>
+    {{ output.output -}}
+    </output>
+    {%- else -%}
+    <warning>
+    The output of your last command was too long.
+    Please try a different command that produces less output.
+    </warning>
+    {%- set elided_chars = output.output | length - 10000 -%}
+    <output_head>
+    {{ output.output[:5000] }}
+    </output_head>
+    <elided_chars>
+    {{ elided_chars }} characters elided
+    </elided_chars>
+    <output_tail>
+    {{ output.output[-5000:] }}
+    </output_tail>
+    {%- endif -%}
+  format_error_template: |
+    Please provide EXACTLY ONE action in triple backticks.
+    If you want to end your session, issue: `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`
+    
+    Format your response exactly as follows:
+
+    <response_example>
+    Your thoughts about why you want to perform this action.
+
+    ```bash
+    <action>
+    ```
+    </response_example>
+  # IMPORTANT: Limit steps to prevent runaway sessions burning API credits
+  step_limit: 50
+  cost_limit: 0
+  mode: yolo
+environment:
+  env:
+    PAGER: cat
+    MANPAGER: cat
+    LESS: -R
+    PIP_PROGRESS_BAR: 'off'
+    TQDM_DISABLE: '1'
+model:
+  model_kwargs:
+    temperature: 0.0
+    drop_params: true
