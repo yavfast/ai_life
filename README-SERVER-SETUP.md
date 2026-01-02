@@ -198,12 +198,22 @@ ssh debian "~/sync-qwen-token.sh"
 
 # Or directly on the server
 ~/sync-qwen-token.sh
+
+# Force token validity test even if token unchanged
+~/sync-qwen-token.sh --force
 ```
 
 The script will:
 1. Extract the current token from `~/.qwen/oauth_creds.json`
 2. Update `~/.config/mini-swe-agent/.env`
-3. Verify the token works by testing the API
+3. **Verify the token works by testing the API**
+4. **If token is expired, automatically call `qwen-cli` to refresh it**
+5. **Re-sync the refreshed token to live-SWE-agent config**
+
+**Key Features:**
+- **Auto-refresh**: If the token is expired, the script calls `qwen-cli` (with a minimal "hi" prompt) to trigger OAuth token refresh
+- **Validation**: Always tests token validity after sync
+- **Force test**: Use `--force` to skip early exit and always validate token
 
 **Run this script whenever you get authentication errors with live-SWE-agent!**
 
@@ -212,12 +222,12 @@ The script will:
 ## Troubleshooting
 
 ### OAuth Token Expired / Authentication Errors
-**Quick fix:** Run the sync script:
+**Quick fix:** Run the sync script (it will auto-refresh if needed):
 ```bash
 ssh debian "~/sync-qwen-token.sh"
 ```
 
-**Note:** If the qwen-cli token is expired, running any `qwen` command will auto-refresh it (no browser needed). Then run the sync script.
+**Note:** The sync script now automatically detects expired tokens and refreshes them via `qwen-cli` (no browser needed). The script will call `qwen-cli` with a minimal prompt to trigger OAuth refresh, then update live-SWE-agent.
 
 If for some reason the auto-refresh doesn't work:
 1. Run `qwen` on a machine with a browser
@@ -259,7 +269,7 @@ cat ~/.config/mini-swe-agent/.env
 | `~/live-swe-agent/` | live-SWE-agent repository |
 | `~/live-swe-agent/config/livesweagent.yaml` | Agent behavior config |
 | `~/live-swe-agent/venv/` | Python virtual environment |
-| `~/sync-qwen-token.sh` | **Token sync script** (run when live-SWE-agent auth fails) |
+| `~/sync-qwen-token.sh` | **Token sync script** (auto-refreshes expired tokens, use `--force` to test validity) |
 
 ---
 
