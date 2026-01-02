@@ -180,7 +180,16 @@ mini --config config/livesweagent.yaml --model openai/qwen3-coder-plus \
 
 ## Token Management
 
-### Sync Token (Recommended Method)
+### Important: qwen-cli Auto-Refreshes Tokens WITHOUT Browser
+
+**Key discovery (verified January 2026):** The `qwen-cli` tool can refresh OAuth tokens automatically on a headless server WITHOUT needing a browser! Simply running `qwen` with any request (e.g., `echo "test" | qwen`) will trigger an automatic token refresh if the token is close to expiring.
+
+This means:
+- You do NOT need to re-authenticate via browser when tokens expire
+- Just run any qwen-cli command and it will auto-refresh
+- The updated token is saved to `~/.qwen/oauth_creds.json`
+
+### Sync Token to live-SWE-agent
 The qwen-cli token auto-refreshes, but live-SWE-agent needs manual sync. Use the sync script:
 
 ```bash
@@ -208,7 +217,9 @@ The script will:
 ssh debian "~/sync-qwen-token.sh"
 ```
 
-If the qwen-cli token itself is expired:
+**Note:** If the qwen-cli token is expired, running any `qwen` command will auto-refresh it (no browser needed). Then run the sync script.
+
+If for some reason the auto-refresh doesn't work:
 1. Run `qwen` on a machine with a browser
 2. Complete OAuth flow
 3. Copy `~/.qwen/oauth_creds.json` to the server
