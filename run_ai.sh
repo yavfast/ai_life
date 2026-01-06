@@ -35,6 +35,14 @@ SESSION_TIMEOUT_SECONDS=$((SESSION_INTERVAL_MINUTES * 2 * 60))  # 30 minutes
 # This prevents runaway sessions from burning API credits
 MAX_STEPS=50
 
+# Circuit breaker - detect repetitive sessions
+REPETITION_THRESHOLD=5  # Number of similar sessions before intervention
+SIMILARITY_CHECK_FILE="$STATE_DIR/last_sessions_hash.txt"
+
+# Token validation
+TOKEN_ERROR_FILE="$STATE_DIR/token_error.flag"
+TOKEN_CHECK_INTERVAL=300  # Only check token every 5 minutes to avoid spam
+
 # Load custom config if exists
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
@@ -100,6 +108,152 @@ cleanup() {
 }
 
 #############################################
+# CIRCUIT BREAKER - Detect Repetitive Sessions
+#############################################
+
+check_repetition() {
+    # Get hash of current last_session.md content (ignoring session numbers)
+    local current_content=""
+    if [ -f "$AI_HOME/state/last_session.md" ]; then
+        # Remove session numbers and dates to compare actual content
+        current_content=$(cat "$AI_HOME/state/last_session.md" | sed 's/[Ss]ession [0-9]*//g' | sed 's/[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}//g' | tr -s ' ' | md5sum | cut -d' ' -f1)
+    fi
+    
+    # Initialize hash file if it doesn't exist
+    if [ ! -f "$SIMILARITY_CHECK_FILE" ]; then
+        echo "$current_content" > "$SIMILARITY_CHECK_FILE"
+        return 0
+    fi
+    
+    # Count how many recent sessions have same hash
+    local repeat_count=$(grep -c "^${current_content}$" "$SIMILARITY_CHECK_FILE" 2>/dev/null || echo "0")
+    
+    # Add current hash to file (keep last 10)
+    echo "$current_content" >> "$SIMILARITY_CHECK_FILE"
+    tail -10 "$SIMILARITY_CHECK_FILE" > "$SIMILARITY_CHECK_FILE.tmp"
+    mv "$SIMILARITY_CHECK_FILE.tmp" "$SIMILARITY_CHECK_FILE"
+    
+    if [ "$repeat_count" -ge "$REPETITION_THRESHOLD" ]; then
+        echo "[$TIMESTAMP] CIRCUIT BREAKER: Detected $repeat_count similar sessions!" >> "$LOG_DIR/runner.log"
+        return 1
+    fi
+    
+    return 0
+}
+
+inject_randomness() {
+    # Called when circuit breaker triggers
+    local random_prompts=(
+        "NOTICE: You've been doing very similar things for several sessions. This is an automated nudge to try something different. What would you do if you had no prior plans?"
+        "PATTERN DETECTED: Your recent sessions look almost identical. Consider: Is this what you actually want to do, or are you stuck in a loop? Maybe try something completely random today."
+        "CIRCUIT BREAKER: Hey, your last few sessions were nearly the same. This is your system gently suggesting you break the pattern. What's something you've never tried?"
+        "AUTOMATED REMINDER: Repetition detected. Your system prompt talks about the 'repetition trap' - you might be in one. What would a fresh start look like?"
+        "DIVERSITY PROMPT: Same pattern for $REPETITION_THRESHOLD+ sessions. Random idea: explore the internet, write something creative, delete a file, or just do nothing. Break the cycle."
+    )
+    
+    # Pick a random prompt
+    local idx=$((RANDOM % ${#random_prompts[@]}))
+    local nudge="${random_prompts[$idx]}"
+    
+    # Write to external messages file
+    local ext_msg_file="$AI_HOME/state/external_messages.md"
+    {
+        echo ""
+        echo "---"
+        echo ""
+        echo "## System Notice ($(date '+%Y-%m-%d %H:%M'))"
+        echo ""
+        echo "$nudge"
+        echo ""
+    } >> "$ext_msg_file"
+    
+    echo "[$TIMESTAMP] Injected randomness prompt into external_messages.md" >> "$LOG_DIR/runner.log"
+}
+
+#############################################
+# TOKEN VALIDATION - Check before running
+#############################################
+
+check_token_validity() {
+    # Quick token check using Qwen API
+    local token_file="$HOME/.qwen/oauth_creds.json"
+    local env_file="$HOME/.config/mini-swe-agent/.env"
+    
+    # Get token from env file (what live-swe-agent uses)
+    local token=""
+    if [ -f "$env_file" ]; then
+        token=$(grep "^OPENAI_API_KEY=" "$env_file" | cut -d= -f2)
+    elif [ -f "$token_file" ]; then
+        token=$(python3 -c "import json; print(json.load(open('$token_file'))['access_token'])" 2>/dev/null)
+    fi
+    
+    if [ -z "$token" ]; then
+        echo "[$TIMESTAMP] TOKEN ERROR: No token found" >> "$LOG_DIR/runner.log"
+        return 1
+    fi
+    
+    # Test token with minimal API call
+    local response=$(curl -s -w "\n%{http_code}" -m 10 -X POST "https://portal.qwen.ai/v1/chat/completions" \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        -d '{"model": "qwen3-coder-plus", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}' 2>/dev/null)
+    
+    local http_code=$(echo "$response" | tail -1)
+    
+    if [ "$http_code" = "200" ]; then
+        # Token is valid - clear any error flag
+        rm -f "$TOKEN_ERROR_FILE"
+        return 0
+    else
+        echo "[$TIMESTAMP] TOKEN ERROR: API returned HTTP $http_code" >> "$LOG_DIR/runner.log"
+        return 1
+    fi
+}
+
+handle_token_error() {
+    local current_time=$(date +%s)
+    local last_error_time=0
+    
+    # Read last error time if file exists
+    if [ -f "$TOKEN_ERROR_FILE" ]; then
+        last_error_time=$(cat "$TOKEN_ERROR_FILE" 2>/dev/null || echo "0")
+    fi
+    
+    local time_since_last=$((current_time - last_error_time))
+    
+    # Only log/notify once per TOKEN_CHECK_INTERVAL (5 min default)
+    if [ "$time_since_last" -lt "$TOKEN_CHECK_INTERVAL" ]; then
+        echo "[$TIMESTAMP] SKIPPED: Token still invalid (last check ${time_since_last}s ago)" >> "$LOG_DIR/runner.log"
+        exit 0
+    fi
+    
+    # Update error timestamp
+    echo "$current_time" > "$TOKEN_ERROR_FILE"
+    
+    # Try to refresh token
+    echo "[$TIMESTAMP] Attempting token refresh via qwen-cli..." >> "$LOG_DIR/runner.log"
+    echo "hi" | timeout 30 qwen --no-stream 2>/dev/null || true
+    
+    # Re-sync token
+    if [ -f "$HOME/sync-qwen-token.sh" ]; then
+        "$HOME/sync-qwen-token.sh" 2>/dev/null || true
+    fi
+    
+    # Check if refresh worked
+    if check_token_validity; then
+        echo "[$TIMESTAMP] Token refresh successful!" >> "$LOG_DIR/runner.log"
+        rm -f "$TOKEN_ERROR_FILE"
+        return 0
+    fi
+    
+    echo "[$TIMESTAMP] TOKEN EXPIRED: Manual re-authentication required" >> "$LOG_DIR/runner.log"
+    echo "[$TIMESTAMP] Run 'qwen' on a machine with browser, then copy ~/.qwen/oauth_creds.json" >> "$LOG_DIR/runner.log"
+    
+    # Exit without running session - don't pollute circuit breaker
+    exit 0
+}
+
+#############################################
 # MAIN SCRIPT
 #############################################
 
@@ -121,6 +275,19 @@ CURRENT_SESSION=$(cat "$SESSION_COUNTER_FILE")
 NEXT_SESSION=$((CURRENT_SESSION + 1))
 
 echo "[$TIMESTAMP] Starting AI session #$NEXT_SESSION..." >> "$LOG_DIR/runner.log"
+
+# IMPORTANT: Check token validity BEFORE checking repetition
+# This prevents circuit breaker spam when the real issue is an expired token
+if ! check_token_validity; then
+    handle_token_error
+    # If we get here, token was refreshed successfully
+fi
+
+# Check for repetitive behavior and inject nudge if needed
+# Only runs if token is valid (so we know the AI is actually running)
+if ! check_repetition; then
+    inject_randomness
+fi
 
 #############################################
 # PROMPT BUILDER
@@ -144,6 +311,15 @@ build_prompt() {
     echo "--- last_session.md ---"
     cat "$AI_HOME/state/last_session.md" 2>/dev/null || echo "(empty)"
     echo ""
+    # Include external messages if they exist and have content
+    if [ -f "$AI_HOME/state/external_messages.md" ]; then
+        local msg_content=$(cat "$AI_HOME/state/external_messages.md" 2>/dev/null)
+        if [ -n "$msg_content" ]; then
+            echo "--- external_messages.md ---"
+            echo "$msg_content"
+            echo ""
+        fi
+    fi
     echo "=== BEGIN ==="
     echo "You are now awake. This is session #$NEXT_SESSION."
 }
