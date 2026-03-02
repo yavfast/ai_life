@@ -41,7 +41,7 @@ if [ ! -f "$SWE_ENV" ]; then
     cat > "$SWE_ENV" << ENVEOF
 OPENAI_API_KEY=$NEW_TOKEN
 OPENAI_BASE_URL=https://portal.qwen.ai/v1
-MSWEA_MODEL_NAME=openai/qwen3-coder-plus
+MSWEA_MODEL_NAME=openai/coder-model
 MSWEA_CONFIGURED=true
 MSWEA_COST_TRACKING=ignore_errors
 ENVEOF
@@ -72,7 +72,7 @@ test_token() {
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://portal.qwen.ai/v1/chat/completions" \
         -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" \
-        -d "{\"model\": \"qwen3-coder-plus\", \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}], \"max_tokens\": 5}")
+        -d "{\"model\": \"coder-model\", \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}], \"max_tokens\": 5}")
     
     HTTP_CODE=$(echo "$RESPONSE" | tail -1)
     BODY=$(echo "$RESPONSE" | head -n -1)

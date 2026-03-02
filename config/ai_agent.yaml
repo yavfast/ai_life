@@ -95,7 +95,7 @@ agent:
     
     To end session: put "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" in ONE ```bash block.
   # IMPORTANT: Limit steps to prevent runaway sessions burning API credits
-  step_limit: 50
+  step_limit: 20
   cost_limit: 0
   mode: yolo
 environment:

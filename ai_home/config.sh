@@ -6,7 +6,7 @@
 
 # How often cron runs the agent (in minutes)
 # This should match your crontab entry!
-SESSION_INTERVAL_MINUTES=3
+SESSION_INTERVAL_MINUTES=10
 
 # Maximum session duration in seconds
 # Set to 30 minutes to allow AI to complete longer tasks

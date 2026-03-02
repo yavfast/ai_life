@@ -33,7 +33,7 @@ SESSION_TIMEOUT_SECONDS=$((SESSION_INTERVAL_MINUTES * 2 * 60))  # 30 minutes
 
 # Step limit - maximum number of agent actions per session
 # This prevents runaway sessions from burning API credits
-MAX_STEPS=50
+MAX_STEPS=20
 
 # Circuit breaker - detect repetitive sessions
 REPETITION_THRESHOLD=5  # Number of similar sessions before intervention
@@ -327,7 +327,7 @@ METHOD="${1:-live-swe-agent}"
 
 # IMPORTANT: Check token validity BEFORE checking repetition
 # This prevents circuit breaker spam when the real issue is an expired token
-if ! check_token_validity "$METHOD"; then
+if false && ! check_token_validity "$METHOD"; then  # DISABLED - qwen-cli handles auth
     if [ "$METHOD" = "openrouter" ]; then
         echo "[$TIMESTAMP] OpenRouter token invalid. Please check ~/.config/mini-swe-agent/.env.openrouter" >> "$LOG_DIR/runner.log"
         exit 1
@@ -385,11 +385,22 @@ run_with_live_swe_agent() {
     cd ~/live-swe-agent
     source venv/bin/activate
     
+    # Sync fresh token from oauth_creds.json to .env before each session
+    local token_file="$HOME/.qwen/oauth_creds.json"
+    local env_file="$HOME/.config/mini-swe-agent/.env"
+    if [ -f "$token_file" ]; then
+        local fresh_token=$(python3 -c "import json; print(json.load(open('$token_file'))['access_token'])" 2>/dev/null)
+        if [ -n "$fresh_token" ]; then
+            sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$fresh_token|" "$env_file"
+            export OPENAI_API_KEY="$fresh_token"
+        fi
+    fi
+    
     PROMPT=$(build_prompt)
     
     # Use custom config with step limit
     timeout "${SESSION_TIMEOUT_SECONDS}s" mini --config config/ai_agent.yaml \
-         --model openai/qwen3-coder-plus \
+         --model openai/coder-model \
          --task "$PROMPT" \
          --yolo \
          --cost-limit 0 \

@@ -43,7 +43,7 @@ qwen -p "Hello" --output-format json
 ```bash
 cd ~/live-swe-agent
 source venv/bin/activate
-mini --config config/livesweagent.yaml --model openai/qwen3-coder-plus --task "your task here" --yolo
+mini --config config/livesweagent.yaml --model openai/coder-model --task "your task here" --yolo
 ```
 
 **Note:** The `--config config/livesweagent.yaml` flag is REQUIRED to enable live-swe-agent's self-evolving capabilities!
@@ -103,7 +103,7 @@ Host debian
 ```bash
 OPENAI_API_KEY=<access_token from oauth_creds.json>
 OPENAI_BASE_URL=https://portal.qwen.ai/v1
-MSWEA_MODEL_NAME=openai/qwen3-coder-plus
+MSWEA_MODEL_NAME=openai/coder-model
 MSWEA_CONFIGURED=true
 MSWEA_COST_TRACKING=ignore_errors
 ```
@@ -119,9 +119,9 @@ MSWEA_COST_TRACKING=ignore_errors
 | **Protocol** | OpenAI-compatible |
 | **Base URL** | `https://portal.qwen.ai/v1` |
 | **Auth** | Bearer token from `~/.qwen/oauth_creds.json` |
-| **Models** | `qwen3-coder-plus`, `qwen3-coder-flash` |
-| **Limits** | 2,000 requests/day, 60 requests/minute |
-| **Cost** | FREE (no token limits) |
+| **Models** | `coder-model` (recommended, maps to qwen3.5-plus), `qwen3-coder-plus` (older) |
+|| **Limits** | Per-model daily quotas (vary by model, see QWEN-TOKEN-DEBUG-GUIDE.md) |
+|| **Cost** | FREE (OAuth tier) |
 
 ### Test API directly:
 ```bash
@@ -129,7 +129,7 @@ ACCESS_TOKEN=$(cat ~/.qwen/oauth_creds.json | python3 -c "import sys,json; print
 curl -X POST "https://portal.qwen.ai/v1/chat/completions" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model": "qwen3-coder-plus", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "coder-model", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ---
@@ -154,15 +154,15 @@ cd ~/live-swe-agent
 source venv/bin/activate
 
 # Create a file
-mini --config config/livesweagent.yaml --model openai/qwen3-coder-plus \
+mini --config config/livesweagent.yaml --model openai/coder-model \
   --task "Create a hello.py that prints Hello World" --yolo
 
 # Fix a bug (in a repo)
-mini --config config/livesweagent.yaml --model openai/qwen3-coder-plus \
+mini --config config/livesweagent.yaml --model openai/coder-model \
   --task "Fix the bug in main.py where division by zero occurs" --yolo
 
 # Run with step limit
-mini --config config/livesweagent.yaml --model openai/qwen3-coder-plus \
+mini --config config/livesweagent.yaml --model openai/coder-model \
   --task "Refactor the code" --yolo --step-limit 10
 ```
 
@@ -241,7 +241,7 @@ ACCESS_TOKEN=$(cat ~/.qwen/oauth_creds.json | python3 -c "import sys,json; print
 curl -s -X POST "https://portal.qwen.ai/v1/chat/completions" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model": "qwen3-coder-plus", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5}'
+  -d '{"model": "coder-model", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5}'
 ```
 
 ### live-SWE-agent Not Using Correct Config
@@ -274,10 +274,10 @@ cat ~/.config/mini-swe-agent/.env
 ---
 
 ## Version Info
-- **qwen-cli**: v0.4.0
+- **qwen-cli**: v0.11.0
 - **mini-swe-agent**: v1.17.1
-- **Node.js**: v20.19.6
-- **Python**: 3.13
+- **Node.js**: v22.16.0
+- **Python**: 3.10.12
 
 ---
 
@@ -295,11 +295,11 @@ Instead of using a separate Dashscope API key (which has limited free tokens), w
 ```bash
 OPENAI_API_KEY=<access_token from oauth_creds.json>
 OPENAI_BASE_URL=https://portal.qwen.ai/v1
-MSWEA_MODEL_NAME=openai/qwen3-coder-plus
+MSWEA_MODEL_NAME=openai/coder-model
 ```
 
-This gives us **FREE unlimited access** (2,000 requests/day) without paying for Dashscope API tokens!
+This gives us **FREE access** via Qwen OAuth tier. See `QWEN-TOKEN-DEBUG-GUIDE.md` for detailed model names, quotas, and troubleshooting.
 
 ---
 
-*Last updated: January 2026*
+*Last updated: March 2026*

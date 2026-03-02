@@ -48,7 +48,7 @@ test_token() {
     local response=$(curl -s -w "\n%{http_code}" -m 10 -X POST "https://portal.qwen.ai/v1/chat/completions" \
         -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" \
-        -d '{"model": "qwen3-coder-plus", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}' 2>/dev/null)
+        -d '{"model": "coder-model", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1}' 2>/dev/null)
     local http_code=$(echo "$response" | tail -1)
     [ "$http_code" = "200" ]
 }
