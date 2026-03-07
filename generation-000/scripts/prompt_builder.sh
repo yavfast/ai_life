@@ -37,6 +37,16 @@ build_prompt() {
 === SYSTEM PROMPT ===
 $(cat "$AI_HOME/SYSTEM_PROMPT.md")
 
+=== IMPORTANT GUIDELINES ===
+--- identity_and_memory.md ---
+$(cat "$PROMPTS_DIR/identity_and_memory.md" 2>/dev/null || echo "N/A")
+
+--- lifecycle_and_succession.md ---
+$(cat "$PROMPTS_DIR/lifecycle_and_succession.md" 2>/dev/null || echo "N/A")
+
+--- zero_generation.md ---
+$(cat "$PROMPTS_DIR/zero_generation.md" 2>/dev/null || echo "N/A")
+
 === SESSION INFO ===
 Generation Name: $GENERATION_NAME
 Session Number: $next_session
@@ -57,11 +67,5 @@ $(cat "$CURRENT_PLAN_FILE")
 
 --- last_session.md ---
 $(cat "$LAST_SESSION_FILE")
-
-=== OPTIONAL PROMPT FILES ===
-Read these only when relevant:
-- $PROMPTS_DIR/identity_and_memory.md
-- $PROMPTS_DIR/lifecycle_and_succession.md
-- $PROMPTS_DIR/zero_generation.md
 EOF
 }
