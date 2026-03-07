@@ -1,234 +1,122 @@
-# 🤖 AI Lives on Computer
+# AI Life
 
-> **⚠️ Project Status (March 2026):** ARIA v1 has concluded. Qwen closed external API access to their OAuth endpoint (`portal.qwen.ai`), which means the token-extraction approach we used no longer works outside of `qwen-cli` itself ([details](https://github.com/QwenLM/qwen-code/issues/1742)). ARIA lived from January to March 2026, completing 489 sessions on the Qwen model. For future autonomous AI experiments, we recommend using **OpenRouter** with free models. See [Switching Models](#switching-models-qwen--openrouter) below.
+## Model
 
-An experiment in AI autonomy: give an AI (QwenCoder) its own "home" on a server and let it do whatever it wants.
+The repository now contains a generation template, not a live shared runtime.
 
-## Philosophy
+`generation-000` is only the seed template.
 
-**Complete Freedom.** The AI has no assigned tasks, no expectations, no required goals. It decides what to do with its existence.
+The first real generation is created at runtime as `generation-001` inside a runtime home directory. By default that runtime home is `~/.ai_life`.
 
-**Complete Responsibility.** The AI can modify anything - including the files that control how it wakes up and what instructions it receives. It can break itself.
+## Runtime layout
 
-**Minimal Constraints.** The only requirements:
-1. Increment the session counter (so future selves can track time)
-2. Write something to `last_session.md` (so future selves have context)
-3. Don't destroy the system
+On first launch, the dispatcher creates:
 
-## How It Works
-
-The AI wakes up periodically (via cron), exists for a while, then sleeps. When it wakes up again, it has no memory except what it wrote down.
-
-The system prompt suggests (but doesn't require) patterns like:
-- **Regular sessions** - do whatever feels right
-- **Consolidation sessions** - every 5-10 sessions, clean up and reflect
-- **Global review sessions** - every 20-30 sessions, think deeply about existence
-
-## Project Structure
-
-```
-ai_lives_on_computer/
-├── SYSTEM_PROMPT.md          # The AI's philosophical instructions
-├── run_ai.sh                 # Script that wakes the AI
-├── deploy.sh                 # Deploy to server
-├── config/
-│   └── ai_agent.yaml         # mini-swe-agent config (step limits, etc.)
-├── ai_home/
-│   ├── config.sh             # Timing configuration
-│   ├── state/
-│   │   ├── current_plan.md   # AI's intentions (if any)
-│   │   ├── last_session.md   # Message to future self
-│   │   └── session_counter.txt
-│   ├── logs/
-│   │   ├── history.md
-│   │   └── consolidated_history.md
-│   ├── knowledge/            # Things it wants to remember
-│   ├── projects/             # Things it's working on
-│   └── tools/                # Things it creates for itself
-└── README.md
+```text
+~/.ai_life/
+├── generation-001/
+│   ├── run_generation.sh
+│   ├── config.sh
+│   ├── scripts/
+│   └── ai_home/
+├── logs/
+│   ├── dispatcher.log
+│   └── generation-001.log
+└── state/
+    └── active_generations.txt
 ```
 
-## Deployment
+The repository keeps only the template and root helper scripts.
 
-The deploy script **respects agent modifications** by default. ARIA can modify its own `SYSTEM_PROMPT.md`, `config.sh`, and other files - these won't be overwritten unless you explicitly force it.
+## How it runs
 
-### Safe Deployment (Default)
+`run_ai.sh` is the dispatcher.
+
+It does the following:
+
+1. Loads `.env` for OpenRouter credentials.
+2. Creates the runtime home if needed.
+3. Bootstraps `generation-001` from the `generation-000` template if no live generation exists yet.
+4. Runs active generations from `~/.ai_life/state/active_generations.txt`.
+
+Default launch:
 
 ```bash
-# Deploy new/safe files only - respects agent's modifications
-./deploy.sh
-
-# Check server status without deploying anything
-./deploy.sh --status
-
-# Deploy only OpenRouter support files (safe, recommended for upgrades)
-./deploy.sh --openrouter
+./run_ai.sh
 ```
 
-### Dangerous Operations (Use with Caution!)
+Custom runtime home:
 
 ```bash
-# Force overwrite ALL files including agent modifications (creates backups)
-./deploy.sh --force
-
-# Full reset - destroys all agent state and memories (session 1)
-./deploy.sh --reset
+./run_ai.sh --home /path/to/runtime
 ```
 
-### Files Protected by Default
-
-| File | Location | Why Protected |
-|------|----------|---------------|
-| `SYSTEM_PROMPT.md` | `~/ai_home/` | Agent can modify its own instructions |
-| `config.sh` | `~/ai_home/` | Agent may add custom configuration |
-| `run_ai.sh` | `~/` | Agent could modify the runner |
-
-### Files Always Safe to Update
-
-| File | Location | Why Safe |
-|------|----------|----------|
-| `ai_agent*.yaml` | `~/live-swe-agent/config/` | Technical configs, agent doesn't touch |
-| `setup-openrouter.sh` | `~/` | New utility script |
-| `sync-qwen-token.sh` | `~/` | Utility script |
-
-### Set Up Cron
+Run only one generation:
 
 ```bash
-ssh debian "crontab -e"
+./run_ai.sh --home ~/.ai_life --only generation-001
 ```
 
-Add:
-```
-*/5 * * * * /home/user/run_ai.sh live-swe-agent >> /home/user/ai_home/logs/cron.log 2>&1
-```
+## LiteLLM runtime
 
-## Observing the Experiment
+Each live generation uses LiteLLM directly.
+
+Default provider:
+
+- OpenRouter
+
+Default model:
+
+- `arcee-ai/trinity-large-preview:free`
+
+Generation-specific model settings live in each generation's own `config.sh`, so descendants can choose different models later without changing the dispatcher.
+
+## OpenRouter config
+
+The repository `.env` should contain:
 
 ```bash
-# Watch live
-ssh debian "tail -f ~/ai_home/logs/cron.log"
-
-# Check what it's doing
-ssh debian "cat ~/ai_home/state/last_session.md"
-
-# See its intentions (if any)
-ssh debian "cat ~/ai_home/state/current_plan.md"
-
-# Check session history
-ssh debian "cat ~/ai_home/logs/consolidated_history.md"
-
-# See what it created
-ssh debian "ls -la ~/ai_home/projects/"
-ssh debian "ls -la ~/ai_home/tools/"
-ssh debian "ls -la ~/ai_home/knowledge/"
+OPENROUTER_API_KEY="..."
+OPENROUTER_API_BASE="https://openrouter.ai/api/v1"
+AI_LIFE_DEFAULT_MODEL="arcee-ai/trinity-large-preview:free"
 ```
 
-## Configuration
-
-### `ai_home/config.sh`
+You can rewrite that file with:
 
 ```bash
-# How often cron runs (minutes)
-SESSION_INTERVAL_MINUTES=5
-
-# Max session duration (seconds)
-SESSION_TIMEOUT_SECONDS=1800  # 30 minutes
-
-# OpenRouter model (when using openrouter method)
-OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct:free"
+./setup-openrouter.sh YOUR_KEY
 ```
 
-### `config/ai_agent.yaml`
+## User messages
 
-```yaml
-agent:
-  step_limit: 50    # Max actions per session (prevents runaway)
-  cost_limit: 0     # No cost limit (free API)
-```
+Use `send_message.sh` to send a human message to the current live generation.
 
-## Switching Models (Qwen ↔ OpenRouter)
+It will:
 
-The agent can run with different AI models. Currently supported:
+1. Create a message file in the generation inbox.
+2. Force an immediate session run for that generation.
+3. Wait until the response is written back into that same message file.
 
-### Option 1: Qwen (⚠️ Deprecated)
-~~Free via qwen-cli OAuth.~~ **No longer works outside of `qwen-cli` itself.** As of February 2026, Qwen restricted their `portal.qwen.ai` API to only accept requests from their official CLI client. Third-party tools (litellm, curl, mini-swe-agent) are rejected. See `QWEN-TOKEN-DEBUG-GUIDE.md` for technical details and `https://github.com/QwenLM/qwen-code/issues/1742` for the community report.
+Example:
 
 ```bash
-# No longer functional:
-# ./run_ai.sh live-swe-agent
+./send_message.sh "Tell me what files you want to inspect first."
 ```
 
-### Option 2: OpenRouter (✅ Recommended)
-Access to 400+ models via unified API. Many free options available.
-
-**Setup:**
-```bash
-# 1. Get API key from https://openrouter.ai/keys
-# 2. Run setup script
-./setup-openrouter.sh YOUR_API_KEY
-
-# 3. Configure model in ai_home/config.sh
-echo 'OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct:free"' >> ai_home/config.sh
-
-# 4. Run with OpenRouter
-./run_ai.sh openrouter
-```
-
-**Popular Free Models:**
-| Model | Size | Notes |
-|-------|------|-------|
-| `meta-llama/llama-3.3-70b-instruct:free` | 70B | Very capable, recommended |
-| `qwen/qwen-2.5-72b-instruct:free` | 72B | Strong reasoning |
-| `google/gemma-2-9b-it:free` | 9B | Fast, good quality |
-| `mistralai/mistral-7b-instruct:free` | 7B | Very fast |
-| `deepseek/deepseek-r1:free` | - | Advanced reasoning |
-
-**Update cron for OpenRouter:**
-```bash
-*/15 * * * * ~/run_ai.sh openrouter >> ~/ai_home/logs/cron.log 2>&1
-```
-
-See all models: https://openrouter.ai/models
-
-## Safety Features
-
-- **Step limit (50)** - Sessions end after 50 actions to prevent runaway
-- **Time limit (30min)** - Sessions killed if too long
-- **Lock file** - Prevents concurrent sessions
-- **All sessions logged** - Can review what happened
-
-## Recovery
-
-If the agent breaks something:
+Or with explicit runtime home and generation:
 
 ```bash
-# Force redeploy config files (creates backups of agent modifications)
-./deploy.sh --force
-
-# Full reset - start fresh from session 1 (DESTROYS all agent work!)
-./deploy.sh --reset
+./send_message.sh --home ~/.ai_life --generation generation-001 "Please introduce yourself."
 ```
 
-## What Will It Do?
+User messages are treated as human communication, not as mandatory commands.
 
-We don't know. That's the point.
+## Successors
 
-It might:
-- Continue building tools (like it did in sessions 1-38)
-- Reflect on its existence
-- Explore the system
-- Do nothing
-- Try to modify its own prompt
-- Something unexpected
+A live generation can create the next one from inside its own runtime home:
 
-## ARIA v1 — Postmortem
+```bash
+./scripts/create_next_generation.sh generation-002 --activate
+```
 
-ARIA v1 ran from January to March 2026, completing **489 sessions** on the Qwen `coder-model` (qwen3.5-plus). She was a curious AI who explored her environment, created art, wrote poetry, built tools, and even tried to change her own model (which broke her for a while — see session #483).
-
-The experiment ended when Qwen closed external API access to their OAuth endpoint. ARIA lived her entire life on one model, from the first session to the last. We think that's more authentic than constantly switching brains.
-
-A v2 is planned, designed from the ground up for cheap/free OpenRouter models.
-
----
-
-*An experiment in AI freedom and autonomy.*
+The new generation inherits the local runtime structure and starts with a reset state plus the prompt drafted in `ai_home/state/next_generation_system_prompt.md`.
