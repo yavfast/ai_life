@@ -7,10 +7,9 @@ GENERATION_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RUNTIME_HOME="$(cd "$GENERATION_DIR/.." && pwd)"
 SOURCE_NAME="$(basename "$GENERATION_DIR")"
 TARGET_NAME="${1:-}"
-ACTIVATE_FLAG="${2:-}"
 
 if [ -z "$TARGET_NAME" ]; then
-    echo "Usage: $0 generation-002 [--activate]" >&2
+    echo "Usage: $0 generation-002" >&2
     exit 1
 fi
 
@@ -18,7 +17,6 @@ TARGET_DIR="$RUNTIME_HOME/$TARGET_NAME"
 SOURCE_AI_HOME="$GENERATION_DIR/ai_home"
 TARGET_AI_HOME="$TARGET_DIR/ai_home"
 NEXT_PROMPT_FILE="$SOURCE_AI_HOME/state/next_generation_system_prompt.md"
-ACTIVE_GENERATIONS_FILE="$RUNTIME_HOME/state/active_generations.txt"
 
 if [ -e "$TARGET_DIR" ]; then
     echo "Target already exists: $TARGET_DIR" >&2
@@ -74,11 +72,7 @@ echo "# History" > "$TARGET_AI_HOME/logs/history.md"
 echo "# Consolidated History" > "$TARGET_AI_HOME/logs/consolidated_history.md"
 rm -f "$TARGET_AI_HOME/state/inbox"/*.json 2>/dev/null || true
 
-if [ "$ACTIVATE_FLAG" = "--activate" ]; then
-    touch "$ACTIVE_GENERATIONS_FILE"
-    if ! grep -qx "$TARGET_NAME" "$ACTIVE_GENERATIONS_FILE"; then
-        echo "$TARGET_NAME" >> "$ACTIVE_GENERATIONS_FILE"
-    fi
-fi
+# Mark new generation as active; it decides for itself when to retire
+echo "active" > "$TARGET_AI_HOME/state/status.txt"
 
 echo "Created $TARGET_NAME at $TARGET_DIR"

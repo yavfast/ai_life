@@ -145,19 +145,15 @@ EOF
     : > "$target_dir/ai_home/logs/runner.log"
     echo "# History" > "$target_dir/ai_home/logs/history.md"
     echo "# Consolidated History" > "$target_dir/ai_home/logs/consolidated_history.md"
+    echo "active" > "$target_dir/ai_home/state/status.txt"
 }
 
 ensure_runtime_home() {
     mkdir -p "$RUNTIME_HOME/state" "$RUNTIME_HOME/logs"
     LOCK_FILE="$RUNTIME_HOME/state/dispatcher.lock"
     DISPATCHER_LOG_FILE="$RUNTIME_HOME/logs/dispatcher.log"
-    ACTIVE_GENERATIONS_FILE="$RUNTIME_HOME/state/active_generations.txt"
 
     bootstrap_generation "generation-001"
-
-    if [ ! -f "$ACTIVE_GENERATIONS_FILE" ]; then
-        echo "generation-001" > "$ACTIVE_GENERATIONS_FILE"
-    fi
 }
 
 acquire_lock() {
@@ -197,7 +193,20 @@ cleanup() {
 }
 
 read_active_generations() {
-    grep -v '^[[:space:]]*#' "$ACTIVE_GENERATIONS_FILE" | sed '/^[[:space:]]*$/d'
+    local gen_dir gen_name status_file status
+    for gen_dir in "$RUNTIME_HOME"/generation-*/; do
+        [ -d "$gen_dir" ] || continue
+        gen_name="$(basename "$gen_dir")"
+        status_file="$gen_dir/ai_home/state/status.txt"
+        if [ -f "$status_file" ]; then
+            status=$(tr -d '[:space:]' < "$status_file")
+        else
+            status="active"
+        fi
+        if [ "$status" = "active" ]; then
+            echo "$gen_name"
+        fi
+    done
 }
 
 show_status() {
@@ -225,9 +234,8 @@ show_status() {
     fi
     echo ""
 
-    local active_file="$RUNTIME_HOME/state/active_generations.txt"
-    if [ ! -f "$active_file" ]; then
-        cprint "$C_YELLOW" "  No active_generations.txt found."
+    if [ ! -d "$RUNTIME_HOME" ] || ! compgen -G "$RUNTIME_HOME/generation-*/" > /dev/null 2>&1; then
+        cprint "$C_YELLOW" "  No generation directories found."
         return 0
     fi
 
@@ -236,7 +244,15 @@ show_status() {
     while IFS= read -r gen_name; do
         [ -z "$gen_name" ] && continue
         local gen_dir="$RUNTIME_HOME/$gen_name"
-        printf "  ${C_BOLD}${C_CYAN}▸ %s${C_RESET}\n" "$gen_name"
+        local gen_status="active"
+        if [ -f "$gen_dir/ai_home/state/status.txt" ]; then
+            gen_status=$(tr -d '[:space:]' < "$gen_dir/ai_home/state/status.txt")
+        fi
+        if [ "$gen_status" = "active" ]; then
+            printf "  ${C_BOLD}${C_CYAN}▸ %s${C_RESET}\n" "$gen_name"
+        else
+            printf "  ${C_DIM}▸ %s (retired)${C_RESET}\n" "$gen_name"
+        fi
 
         if [ ! -d "$gen_dir" ]; then
             printf "    ${C_RED}Directory missing${C_RESET}\n\n"
@@ -297,7 +313,7 @@ show_status() {
         fi
 
         echo ""
-    done < <(grep -v '^[[:space:]]*#' "$active_file" | sed '/^[[:space:]]*$/d')
+    done < <(find "$RUNTIME_HOME" -maxdepth 1 -name 'generation-*' -type d -printf '%f\n' | sort)
 }
 
 run_generation() {

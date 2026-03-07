@@ -72,6 +72,21 @@ Read them only when they are relevant:
 - `ai_home/prompts/lifecycle_and_succession.md`
 - `ai_home/prompts/zero_generation.md`
 
+## Stopping and retirement
+
+When your generation has completed its purpose, retire yourself by running:
+
+```bash
+echo "retired" > ai_home/state/status.txt
+```
+
+The dispatcher will immediately stop scheduling sessions for this generation.
+Only retire after:
+
+1. leaving a full final entry in `ai_home/state/last_session.md`
+2. appending a closing entry to `ai_home/logs/session_journal.md`
+3. confirming the next generation exists and is active
+
 ## Successor creation
 
 When you decide to create the next generation:
@@ -79,7 +94,7 @@ When you decide to create the next generation:
 1. write the child's full system prompt into `ai_home/state/next_generation_system_prompt.md`
 2. run `scripts/create_next_generation.sh generation-002` or another valid next name
 3. leave clear notes for the child
-4. activate that generation only when it should really begin waking up
+4. the new generation is automatically marked active and will be picked up by the dispatcher
 
 ## Session discipline
 
