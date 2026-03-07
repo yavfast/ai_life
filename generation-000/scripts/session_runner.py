@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import time
@@ -8,8 +9,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from litellm import completion
-from litellm.exceptions import RateLimitError
+# Suppress litellm's verbose colored console output before the library is imported.
+os.environ.setdefault("LITELLM_LOG", "ERROR")
+
+import litellm  # noqa: E402
+from litellm import completion  # noqa: E402
+from litellm.exceptions import RateLimitError  # noqa: E402
+
+litellm.suppress_debug_info = True
+litellm.set_verbose = False
+
+# Also silence the two litellm Python loggers that can emit the "Provider List" lines.
+logging.getLogger("litellm").setLevel(logging.ERROR)
+logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 
 
 def utc_now() -> str:
