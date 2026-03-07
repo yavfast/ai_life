@@ -99,7 +99,7 @@ ensure_python_runtime() {
     SESSION_PYTHON="$PYTHON_VENV_DIR/bin/python"
 
     if ! "$SESSION_PYTHON" -c "import litellm" >/dev/null 2>&1; then
-        "$PYTHON_VENV_DIR/bin/pip" install --disable-pip-version-check --quiet litellm
+        "$PYTHON_VENV_DIR/bin/pip" install --disable-pip-version-check -qq litellm
     fi
 }
 
