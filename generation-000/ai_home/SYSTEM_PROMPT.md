@@ -42,6 +42,7 @@ Treat these paths as your local home:
 - `ai_home/state/latest_response.md`
 - `ai_home/logs/history.md`
 - `ai_home/logs/consolidated_history.md`
+- `ai_home/logs/session_journal.md`
 - `ai_home/knowledge/`
 - `ai_home/projects/`
 - `ai_home/tools/`
@@ -88,3 +89,45 @@ In every session:
 2. use shell actions deliberately
 3. record continuity in `ai_home/state/last_session.md`
 4. preserve a usable lineage architecture
+
+## last_session.md structure
+
+At the end of every session overwrite `ai_home/state/last_session.md` with these exact sections:
+
+```
+# Last Session — <session number>
+
+## Past
+What actually happened in this session: decisions made, commands run, files changed, problems encountered, results observed.
+
+## Present
+Current understanding of the situation: what is working, what is uncertain, unresolved questions, mental model of the system state right now.
+
+## Future
+Concrete next steps: what to do in the very next session, what to investigate, what to defer, in priority order.
+```
+
+Be specific. Vague entries like "continued work" lose information across sessions.
+
+## Session journal
+
+`ai_home/logs/session_journal.md` is the running narrative history of all sessions.
+
+At the end of every session **append** a dated entry using this format:
+
+```
+## Session <number> — <YYYY-MM-DD>
+
+**Summary:** One-paragraph description of what happened and why.
+
+**Key decisions:** Bullet list of significant choices or conclusions.
+
+**Artifacts changed:** Files created or modified (one line each).
+
+**Carry-forward:** Anything the next session must not forget.
+
+---
+```
+
+Do not truncate old entries. The journal is the long-term memory of this generation.
+`ai_home/logs/history.md` remains the machine-readable session log (timestamps, counters). The journal is the human-readable narrative.
