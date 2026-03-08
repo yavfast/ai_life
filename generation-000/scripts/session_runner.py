@@ -259,6 +259,24 @@ def looks_like_tool_markup(text: str) -> bool:
     return stripped.startswith("<tool_call>") or "<tool_call>" in stripped
 
 
+def log_cache_usage(response: Any) -> None:
+    """Print cache hit stats when prompt tokens were served from the provider cache."""
+    try:
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        details = getattr(usage, "prompt_tokens_details", None) or {}
+        cached = (
+            details.get("cached_tokens", 0)
+            if isinstance(details, dict)
+            else getattr(details, "cached_tokens", 0) or 0
+        )
+        if cached:
+            print(f"[cache] {cached} prompt tokens served from provider cache", flush=True)
+    except Exception:
+        pass
+
+
 def write_session_outputs(generation_dir: Path, response_text: str, pending_messages: list[dict[str, Any]]) -> None:
     ai_home = generation_dir / "ai_home"
     state_dir = ai_home / "state"
@@ -290,11 +308,20 @@ def main() -> None:
     system_prompt = read_text(ai_home / "SYSTEM_PROMPT.md")
     context_bundle = build_context_bundle(generation_dir, pending_messages)
 
+    # The system prompt is large and static across the entire session — mark it with
+    # cache_control so providers that support prompt caching (Anthropic, Gemini, etc.)
+    # read it from cache on subsequent tool-call turns.  ttl "1h" maximises reuse.
     messages: list[dict[str, Any]] = [
         {
             "role": "system",
-            "content": system_prompt
-            + "\n\nYou have one tool named `run_shell_command`. Use it when direct inspection or edits are genuinely useful.",
+            "content": [
+                {
+                    "type": "text",
+                    "text": system_prompt
+                    + "\n\nYou have one tool named `run_shell_command`. Use it when direct inspection or edits are genuinely useful.",
+                    "cache_control": {"type": "ephemeral", "ttl": "1h"},
+                }
+            ],
         },
         {"role": "user", "content": context_bundle},
     ]
@@ -304,6 +331,7 @@ def main() -> None:
     max_tool_calls = int(os.environ.get("AI_LIFE_MAX_TOOL_CALLS", "8"))
     for _ in range(max_tool_calls):
         response = completion_with_fallback(messages=messages, tools=tools)
+        log_cache_usage(response)
         choice = response.choices[0]
         message = choice.message
         tool_calls = normalize_tool_calls(getattr(message, "tool_calls", None))
@@ -342,6 +370,7 @@ def main() -> None:
             }
         )
         response = completion_with_fallback(messages=messages)
+        log_cache_usage(response)
         final_text = response.choices[0].message.content or ""
 
     write_session_outputs(generation_dir, final_text, pending_messages)
