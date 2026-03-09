@@ -149,7 +149,7 @@ Optional child overlay:
 Creation status flow:
 
 - the child starts as `build`
-- the child becomes `active` only after assembly finishes successfully
+- the child becomes `active` only after assembly finishes successfully and `status.txt` is changed to `active`
 - retired generations remain available for analysis but are not scheduled
 
 The generation root now stores `status.txt`, not `ai_home/state/status.txt`.

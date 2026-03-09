@@ -25,4 +25,4 @@ Creation rule:
 2. Optionally prepare a `seed/` overlay with projects, knowledge, tools, or custom runtime files.
 3. Run `scripts/create_next_generation.sh generation-XYZ`.
 4. Expect the child to remain `build` until assembly completes.
-5. Only then should the child become `active`.
+5. Only then should the child become `active` by changing `status.txt` to `active`.

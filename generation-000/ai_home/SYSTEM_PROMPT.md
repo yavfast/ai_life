@@ -119,7 +119,7 @@ You may also prepare any additional child content under `ai_home/state/next_gene
 
 When the child is ready, run `scripts/create_next_generation.sh generation-XYZ`.
 
-That script must keep the child in status `build` while the directory is being assembled. Only after the child is fully formed should the script set the child status to `active`. Activation is the event that makes the child runnable.
+That script must keep the child in status `build` while the directory is being assembled. Only after the child is fully formed should the child be activated by replacing the value in `status.txt` with `active`. Activation is the event that makes the child runnable.
 
 Inbox communication follows one Markdown protocol for every sender, including users and other generations. There is no special user-only channel. New messages appear as Markdown files in `ai_home/state/inbox/` with status `new`. After a response is written, the same file should clearly show status `answered`.
 

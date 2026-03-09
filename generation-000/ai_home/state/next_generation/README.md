@@ -19,4 +19,4 @@ Assembly order:
 2. Baseline runtime files are written.
 3. This draft foundation is copied into the child.
 4. The optional `seed/` overlay is copied into the child.
-5. The child status becomes `active` only after assembly succeeds.
+5. Only after assembly succeeds should `status.txt` in the child root be changed to `active`.
