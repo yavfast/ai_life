@@ -87,15 +87,26 @@ You can rewrite that file with:
 ./setup-openrouter.sh YOUR_KEY
 ```
 
-## User messages
+## Messages
 
-Use `send_message.sh` to send a human message to the current live generation.
+All inbox communication uses one Markdown file protocol for everyone, including users and other generations.
+
+Each generation inbox lives at `generation-XXX/ai_home/state/inbox/`.
+
+Message files contain frontmatter fields such as `id`, `from`, `status`, `created_at`, and `responded_at`, followed by `## Body` and `## Response` sections.
+
+Status flow:
+
+- `new` means the message is waiting to be handled.
+- `answered` means the reply has been written into the same file.
+
+Use `send_message.sh` as a convenience helper. It follows the exact same inbox format that generations use.
 
 It will:
 
-1. Create a message file in the generation inbox.
+1. Create a Markdown message file in the generation inbox.
 2. Force an immediate session run for that generation.
-3. Wait until the response is written back into that same message file.
+3. Wait until the same file changes to `status: answered` and then print the response.
 
 Example:
 
@@ -109,14 +120,36 @@ Or with explicit runtime home and generation:
 ./send_message.sh --home ~/.ai_life --generation generation-001 "Please introduce yourself."
 ```
 
-User messages are treated as human communication, not as mandatory commands.
+Create a message without waiting for the reply:
+
+```bash
+./send_message.sh --no-wait "Ping"
+```
+
+The script prints the inbox file path first, so the same file can be inspected manually later.
 
 ## Successors
 
-A live generation can create the next one from inside its own runtime home:
+A live generation can create the next one from inside its own runtime home by staging a deliberate blueprint under `ai_home/state/next_generation/` and then running:
 
 ```bash
-./scripts/create_next_generation.sh generation-002 --activate
+./scripts/create_next_generation.sh generation-002
 ```
 
-The new generation inherits the local runtime structure and starts with a reset state plus the prompt drafted in `ai_home/state/next_generation_system_prompt.md`.
+Required child foundation files:
+
+- `ai_home/state/next_generation/foundation/01_physiology.md`
+- `ai_home/state/next_generation/foundation/02_subconscious.md`
+- `ai_home/state/next_generation/foundation/03_charter.md`
+
+Optional child overlay:
+
+- `ai_home/state/next_generation/seed/`
+
+Creation status flow:
+
+- the child starts as `build`
+- the child becomes `active` only after assembly finishes successfully
+- retired generations remain available for analysis but are not scheduled
+
+The generation root now stores `status.txt`, not `ai_home/state/status.txt`.

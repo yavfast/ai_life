@@ -18,6 +18,14 @@ main() {
     load_generation_config
     load_environment_config
     ensure_generation_state
+
+    if ! is_generation_active; then
+        echo "  Generation : $GENERATION_NAME"
+        echo "  Status     : $(get_generation_status)"
+        echo "  Skipped    : only active generations may run"
+        exit 0
+    fi
+
     ensure_python_runtime
 
     trap cleanup EXIT INT TERM

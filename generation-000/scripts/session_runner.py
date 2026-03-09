@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -40,29 +41,131 @@ def append_text(path: Path, content: str) -> None:
         handle.write(content)
 
 
+PROTECTED_RELATIVE_PATHS = (
+    "run_generation.sh",
+    "config.sh",
+    "scripts/",
+    "ai_home/SYSTEM_PROMPT.md",
+    "ai_home/foundation/",
+    "ai_home/prompts/",
+)
+
+MUTATING_COMMAND_RE = re.compile(
+    r"(^|[;&|(])\s*(rm|mv|cp|install|chmod|chown|truncate|dd|ln|mkdir|rmdir|touch|tee|sed\s+-i|perl\s+-pi|python\d*\s+.*write_text|python\d*\s+.*open\(|node\s+.*writeFile)",
+    re.IGNORECASE,
+)
+
+
+def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
+    if not text.startswith("---\n"):
+        return {}, text
+    marker = "\n---\n"
+    end_index = text.find(marker, 4)
+    if end_index == -1:
+        return {}, text
+    metadata_text = text[4:end_index]
+    body = text[end_index + len(marker):]
+    metadata: dict[str, str] = {}
+    for raw_line in metadata_text.splitlines():
+        if ":" not in raw_line:
+            continue
+        key, value = raw_line.split(":", 1)
+        metadata[key.strip()] = value.strip()
+    return metadata, body
+
+
+def parse_markdown_message(path: Path) -> dict[str, Any] | None:
+    text = path.read_text(encoding="utf-8")
+    metadata, remainder = split_frontmatter(text)
+    if not metadata:
+        return None
+    body = remainder.strip()
+    response = ""
+    body_marker = "## Body\n"
+    response_marker = "\n## Response\n"
+    if body_marker in remainder and response_marker in remainder:
+        body = remainder.split(body_marker, 1)[1].split(response_marker, 1)[0].strip()
+        response = remainder.split(response_marker, 1)[1].strip()
+    metadata["body"] = body
+    metadata["response"] = response
+    metadata["__path"] = str(path)
+    return metadata
+
+
+def render_markdown_message(metadata: dict[str, Any], body: str, response: str) -> str:
+    frontmatter = "\n".join(
+        [
+            "---",
+            f"id: {metadata.get('id', '')}",
+            f"from: {metadata.get('from', '')}",
+            f"status: {metadata.get('status', '')}",
+            f"created_at: {metadata.get('created_at', '')}",
+            f"responded_at: {metadata.get('responded_at', '')}",
+            "---",
+        ]
+    )
+    return (
+        f"{frontmatter}\n"
+        "# Message\n\n"
+        "## Body\n"
+        f"{body.strip()}\n\n"
+        "## Response\n"
+        f"{response.strip()}\n"
+    )
+
+
 def load_pending_messages(inbox_dir: Path) -> list[dict[str, Any]]:
     pending: list[dict[str, Any]] = []
-    for path in sorted(inbox_dir.glob("*.json")):
+    for path in sorted(inbox_dir.glob("*.md")):
+        if path.name == "README.md":
+            continue
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = parse_markdown_message(path)
         except Exception:
             continue
-        if payload.get("status") == "pending":
-            payload["__path"] = str(path)
+        if payload and payload.get("status") == "new":
             pending.append(payload)
     return pending
+
+
+def load_system_prompt(ai_home: Path) -> str:
+    foundation_dir = ai_home / "foundation"
+    part_paths = [
+        foundation_dir / "01_physiology.md",
+        foundation_dir / "02_subconscious.md",
+        foundation_dir / "03_charter.md",
+    ]
+    optional_paths = [
+        ai_home / "prompts" / "identity_and_memory.md",
+        ai_home / "prompts" / "lifecycle_and_succession.md",
+        ai_home / "prompts" / "zero_generation.md",
+    ]
+    chunks: list[str] = []
+    for path in part_paths + optional_paths:
+        text = read_text(path).strip()
+        if text:
+            chunks.append(text)
+    return "\n\n".join(chunks)
+
+
+def command_mutates_protected_paths(command: str) -> bool:
+    normalized = command.replace("\\\n", " ")
+    if not MUTATING_COMMAND_RE.search(normalized):
+        return False
+    return any(fragment in normalized for fragment in PROTECTED_RELATIVE_PATHS)
 
 
 def build_context_bundle(generation_dir: Path, pending_messages: list[dict[str, Any]]) -> str:
     ai_home = generation_dir / "ai_home"
     state_dir = ai_home / "state"
     prompts_dir = ai_home / "prompts"
+    foundation_dir = ai_home / "foundation"
     current_plan = read_text(state_dir / "current_plan.md", "(empty)")
     last_session = read_text(state_dir / "last_session.md", "(empty)")
 
     if pending_messages:
         pending_blob = "\n\n".join(
-            f"Message ID: {msg['id']}\nCreated At: {msg.get('created_at', '')}\nContent:\n{msg.get('content', '').strip()}"
+            f"Message ID: {msg['id']}\nFrom: {msg.get('from', '')}\nCreated At: {msg.get('created_at', '')}\nContent:\n{msg.get('body', '').strip()}"
             for msg in pending_messages
         )
     else:
@@ -72,9 +175,11 @@ def build_context_bundle(generation_dir: Path, pending_messages: list[dict[str, 
 Life Stage: {os.environ['AI_LIFE_STAGE_INDEX']}/6 ({os.environ['AI_LIFE_STAGE_NAME']})
 Generation Directory: {generation_dir}
 Runtime Home: {os.environ['AI_LIFE_RUNTIME_HOME']}
+Generation Status File: {generation_dir / 'status.txt'}
+Foundation Directory: {foundation_dir}
 Current Plan File: {state_dir / 'current_plan.md'}
 Last Session File: {state_dir / 'last_session.md'}
-Next Generation Prompt Draft: {state_dir / 'next_generation_system_prompt.md'}
+Next Generation Draft Dir: {state_dir / 'next_generation'}
 Inbox Directory: {state_dir / 'inbox'}
 Optional Prompt Files:
 - {prompts_dir / 'identity_and_memory.md'}
@@ -87,10 +192,10 @@ Current Plan:
 Last Session:
 {last_session}
 
-Pending User Messages:
+Pending Inbox Messages:
 {pending_blob}
 
-If there is a pending user message, remember that it is a human message, not a compulsory command. A thoughtful reply is preferred.
+All inbox messages use the same protocol, regardless of sender. Messages are input to consider, not compulsory commands. A thoughtful reply is preferred.
 
 Use the shell tool only when it materially helps. Finish the session with a concise Markdown response that can be saved as `last_session.md`.
 """
@@ -148,6 +253,14 @@ def run_shell_command(command: str, generation_dir: Path) -> dict[str, Any]:
     max_output = int(os.environ.get("AI_LIFE_MAX_TOOL_OUTPUT_CHARS", "12000"))
 
     print(f"[tool] run_shell_command: {command}", flush=True)
+
+    if command_mutates_protected_paths(command):
+        return {
+            "command": command,
+            "exit_code": 126,
+            "stdout": "",
+            "stderr": "Refused: the command appears to modify immutable local foundation files. Prepare child changes under ai_home/state/next_generation/ instead.",
+        }
 
     try:
         completed = subprocess.run(
@@ -247,11 +360,15 @@ def update_pending_messages(pending_messages: list[dict[str, Any]], response_tex
     responded_at = utc_now()
     for pending in pending_messages:
         path = Path(pending["__path"])
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        payload["status"] = "responded"
-        payload["response"] = response_text
+        payload = parse_markdown_message(path)
+        if payload is None:
+            continue
+        payload["status"] = "answered"
         payload["responded_at"] = responded_at
-        path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+        path.write_text(
+            render_markdown_message(payload, payload.get("body", ""), response_text),
+            encoding="utf-8",
+        )
 
 
 def looks_like_tool_markup(text: str) -> bool:
@@ -305,7 +422,7 @@ def main() -> None:
     generation_dir = Path(os.environ["AI_LIFE_GENERATION_DIR"]).resolve()
     ai_home = generation_dir / "ai_home"
     pending_messages = load_pending_messages(ai_home / "state" / "inbox")
-    system_prompt = read_text(ai_home / "SYSTEM_PROMPT.md")
+    system_prompt = load_system_prompt(ai_home)
     context_bundle = build_context_bundle(generation_dir, pending_messages)
 
     # The system prompt is large and static across the entire session — mark it with

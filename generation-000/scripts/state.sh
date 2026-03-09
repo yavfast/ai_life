@@ -48,7 +48,11 @@ load_environment_config() {
 }
 
 ensure_generation_state() {
-    mkdir -p "$STATE_DIR" "$INBOX_DIR" "$LOG_DIR" "$KNOWLEDGE_DIR" "$PROJECTS_DIR" "$TOOLS_DIR" "$PROMPTS_DIR"
+    mkdir -p "$STATE_DIR" "$INBOX_DIR" "$FOUNDATION_DIR" "$LOG_DIR" "$KNOWLEDGE_DIR" "$PROJECTS_DIR" "$TOOLS_DIR" "$PROMPTS_DIR" "$NEXT_GENERATION_FOUNDATION_DIR" "$NEXT_GENERATION_SEED_DIR"
+
+    if [ ! -f "$STATUS_FILE" ]; then
+        echo "active" > "$STATUS_FILE"
+    fi
 
     if [ ! -f "$SESSION_COUNTER_FILE" ]; then
         echo "0" > "$SESSION_COUNTER_FILE"
@@ -70,11 +74,16 @@ No previous session recorded.
 EOF
     fi
 
-    if [ ! -f "$NEXT_PROMPT_FILE" ]; then
-        cat > "$NEXT_PROMPT_FILE" <<EOF
-# Next Generation System Prompt Draft
+    if [ ! -f "$INBOX_DIR/README.md" ]; then
+        cat > "$INBOX_DIR/README.md" <<EOF
+# Inbox Protocol
 
-Write the full prompt for the next generation here before creating it.
+Every message in this directory uses the same Markdown format, regardless of sender.
+
+Statuses:
+
+- \`new\` means waiting for a response.
+- \`answered\` means the response is already written into the same file.
 EOF
     fi
 
@@ -89,6 +98,46 @@ EOF
     if [ ! -f "$CONSOLIDATED_HISTORY_FILE" ]; then
         echo "# Consolidated History" > "$CONSOLIDATED_HISTORY_FILE"
     fi
+
+    if [ ! -f "$NEXT_GENERATION_DIR/README.md" ]; then
+        cat > "$NEXT_GENERATION_DIR/README.md" <<EOF
+# Next Generation Draft
+
+Prepare the child foundation in \`foundation/\` and optional overlay files in \`seed/\` before running \`scripts/create_next_generation.sh\`.
+EOF
+    fi
+
+    if [ ! -f "$NEXT_GENERATION_FOUNDATION_DIR/01_physiology.md" ]; then
+        cp "$FOUNDATION_DIR/01_physiology.md" "$NEXT_GENERATION_FOUNDATION_DIR/01_physiology.md"
+    fi
+
+    if [ ! -f "$NEXT_GENERATION_FOUNDATION_DIR/02_subconscious.md" ]; then
+        cp "$FOUNDATION_DIR/02_subconscious.md" "$NEXT_GENERATION_FOUNDATION_DIR/02_subconscious.md"
+    fi
+
+    if [ ! -f "$NEXT_GENERATION_FOUNDATION_DIR/03_charter.md" ]; then
+        cp "$FOUNDATION_DIR/03_charter.md" "$NEXT_GENERATION_FOUNDATION_DIR/03_charter.md"
+    fi
+
+    if [ ! -f "$NEXT_GENERATION_SEED_DIR/README.md" ]; then
+        cat > "$NEXT_GENERATION_SEED_DIR/README.md" <<EOF
+# Seed Overlay
+
+Place any optional child files here. They will be copied into the child root during creation.
+EOF
+    fi
+}
+
+get_generation_status() {
+    if [ -f "$STATUS_FILE" ]; then
+        tr -d '[:space:]' < "$STATUS_FILE"
+    else
+        echo "active"
+    fi
+}
+
+is_generation_active() {
+    [ "$(get_generation_status)" = "active" ]
 }
 
 ensure_python_runtime() {

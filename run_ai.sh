@@ -120,6 +120,7 @@ bootstrap_generation() {
     cp -R "$TEMPLATE_GENERATION_DIR" "$target_dir"
     rewrite_generation_name "$target_dir" "$target_name"
     rm -f "$target_dir/ai_home/state/session.lock"
+    rm -f "$target_dir/ai_home/state/status.txt"
     echo "0" > "$target_dir/ai_home/state/session_counter.txt"
 
     cat > "$target_dir/ai_home/state/last_session.md" <<EOF
@@ -134,18 +135,13 @@ EOF
 Bootstrap $target_name and decide its first priorities.
 EOF
 
-    cat > "$target_dir/ai_home/state/next_generation_system_prompt.md" <<EOF
-# Next Generation System Prompt Draft
-
-Write the full prompt for the next generation here before creating it.
-EOF
-
-    mkdir -p "$target_dir/ai_home/state/inbox"
+    mkdir -p "$target_dir/ai_home/state/inbox" "$target_dir/ai_home/state/next_generation/foundation" "$target_dir/ai_home/state/next_generation/seed"
     : > "$target_dir/ai_home/state/latest_response.md"
     : > "$target_dir/ai_home/logs/runner.log"
     echo "# History" > "$target_dir/ai_home/logs/history.md"
     echo "# Consolidated History" > "$target_dir/ai_home/logs/consolidated_history.md"
-    echo "active" > "$target_dir/ai_home/state/status.txt"
+    echo "# Session Journal" > "$target_dir/ai_home/logs/session_journal.md"
+    echo "active" > "$target_dir/status.txt"
 }
 
 ensure_runtime_home() {
@@ -197,7 +193,7 @@ read_active_generations() {
     for gen_dir in "$RUNTIME_HOME"/generation-*/; do
         [ -d "$gen_dir" ] || continue
         gen_name="$(basename "$gen_dir")"
-        status_file="$gen_dir/ai_home/state/status.txt"
+        status_file="$gen_dir/status.txt"
         if [ -f "$status_file" ]; then
             status=$(tr -d '[:space:]' < "$status_file")
         else
@@ -245,11 +241,13 @@ show_status() {
         [ -z "$gen_name" ] && continue
         local gen_dir="$RUNTIME_HOME/$gen_name"
         local gen_status="active"
-        if [ -f "$gen_dir/ai_home/state/status.txt" ]; then
-            gen_status=$(tr -d '[:space:]' < "$gen_dir/ai_home/state/status.txt")
+        if [ -f "$gen_dir/status.txt" ]; then
+            gen_status=$(tr -d '[:space:]' < "$gen_dir/status.txt")
         fi
         if [ "$gen_status" = "active" ]; then
             printf "  ${C_BOLD}${C_CYAN}▸ %s${C_RESET}\n" "$gen_name"
+        elif [ "$gen_status" = "build" ]; then
+            printf "  ${C_YELLOW}▸ %s (build)${C_RESET}\n" "$gen_name"
         else
             printf "  ${C_DIM}▸ %s (retired)${C_RESET}\n" "$gen_name"
         fi
@@ -297,7 +295,7 @@ show_status() {
         local inbox_dir="$gen_dir/ai_home/state/inbox"
         if [ -d "$inbox_dir" ]; then
             local pending_count=0
-            pending_count=$(grep -rl '"status": "pending"' "$inbox_dir" 2>/dev/null | wc -l) || pending_count=0
+            pending_count=$(grep -rl '^status: new$' "$inbox_dir"/*.md 2>/dev/null | wc -l) || pending_count=0
             if [ "${pending_count:-0}" -gt 0 ]; then
                 printf "    Inbox   : ${C_YELLOW}%s pending message(s)${C_RESET}\n" "$pending_count"
             else

@@ -11,4 +11,18 @@ Stage intent:
 5. Observation: mentor through files and structure, not by controlling everything.
 6. Retirement: stop extending your own line and yield continuity.
 
-A child should not be a blind copy. It should receive a better starting point than you had.
+A child should not be a blind copy. It should be assembled from a deliberate blueprint in `ai_home/state/next_generation/`.
+
+Lifecycle status rules:
+
+1. `build`: the generation directory exists but is still being assembled.
+2. `active`: the generation is runnable and may be scheduled.
+3. `retired`: the generation is preserved for analysis but must no longer run.
+
+Creation rule:
+
+1. Prepare the child's three foundation files.
+2. Optionally prepare a `seed/` overlay with projects, knowledge, tools, or custom runtime files.
+3. Run `scripts/create_next_generation.sh generation-XYZ`.
+4. Expect the child to remain `build` until assembly completes.
+5. Only then should the child become `active`.
