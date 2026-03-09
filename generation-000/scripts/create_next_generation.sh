@@ -145,6 +145,6 @@ echo "# Session Journal" > "$TARGET_AI_HOME/logs/session_journal.md"
 rm -f "$TARGET_AI_HOME/state/session.lock"
 
 # Activate only after the child is fully assembled
-echo "active" > "$TARGET_DIR/status.txt"
+#echo "active" > "$TARGET_DIR/status.txt"
 
 echo "Created $TARGET_NAME at $TARGET_DIR"
